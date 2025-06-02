@@ -1,0 +1,35 @@
+# Core ML libraries
+torch>=2.0.0
+transformers>=4.36.0
+datasets>=2.14.0
+accelerate>=0.24.0
+peft>=0.7.0
+
+# Unsloth for optimization
+unsloth[cu118]>=2023.11
+
+# DeepSpeed for multi-GPU training
+deepspeed>=0.12.0
+
+# Data processing
+pandas>=1.5.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+
+# Utilities
+tqdm>=4.64.0
+tensorboard>=2.10.0
+wandb>=0.15.0  # Optional: for experiment tracking
+
+# Quality of life
+ipywidgets>=8.0.0  # For Jupyter notebooks
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# System utilities
+psutil>=5.9.0
+packaging>=21.0
+
+# Optional but recommended
+flash-attn>=2.3.0  # For faster attention computation
+bitsandbytes>=0.41.0  # For quantization support
