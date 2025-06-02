@@ -1,0 +1,304 @@
+# CodeLlama Fine-tuning with Unsloth and DeepSpeed
+
+## 🚀 Project Overview
+
+This project provides a production-ready solution for fine-tuning CodeLlama models using:
+- **Unsloth**: For 2x faster training and memory optimization
+- **DeepSpeed**: For multi-GPU distributed training
+- **LoRA**: For parameter-efficient fine-tuning
+- **Custom data processing**: For instruction-following format
+
+## 📋 Prerequisites
+
+### Hardware Requirements
+- 4x GPUs with 12GB RAM each (your setup)
+- CUDA-compatible GPUs (Tesla V100, RTX 3090, RTX 4090, A100, etc.)
+- At least 64GB system RAM recommended
+- Fast SSD storage (500GB+ free space)
+
+### Software Requirements
+- Python 3.8-3.11
+- CUDA 11.8 or 12.1
+- Ubuntu 18.04+ or similar Linux distribution
+
+## 🛠 Installation Steps
+
+### Step 1: Environment Setup
+
+```bash
+# Create a new conda environment
+conda create -n codellama-finetune python=3.10
+conda activate codellama-finetune
+
+# Update pip
+pip install --upgrade pip
+
+# Install PyTorch with CUDA support
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Install requirements
+pip install -r requirements.txt
+```
+
+### Step 2: Verify GPU Setup
+
+```bash
+# Check GPU availability
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU count: {torch.cuda.device_count()}')"
+
+# Check DeepSpeed installation
+ds_report
+```
+
+### Step 3: Prepare Your Data
+
+Your CSV file should have exactly these columns:
+```csv
+Instruction,Output
+"Write a function to calculate factorial","def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n-1)"
+"Create a class for a binary tree","class TreeNode:\n    def __init__(self, val=0):\n        self.val = val\n        self.left = None\n        self.right = None"
+```
+
+**Data Preparation Guidelines:**
+- Ensure instructions are clear and specific
+- Code outputs should be properly formatted
+- Remove any rows with empty instructions or outputs
+- Aim for 1000+ examples for good results
+- Use consistent coding style in outputs
+
+## 🚀 Running the Training
+
+### Basic Training Command
+
+```bash
+# Single-node multi-GPU training
+deepspeed --num_gpus=4 train.py \
+    --csv_path ./your_training_data.csv \
+    --output_dir ./results \
+    --deepspeed_config ./ds_config.json \
+    --max_seq_length 2048 \
+    --lora_r 64 \
+    --lora_alpha 16
+```
+
+### Advanced Training with Custom Parameters
+
+```bash
+# With custom validation split and model selection
+deepspeed --num_gpus=4 train.py \
+    --csv_path ./training_data.csv \
+    --instruction_column "Instruction" \
+    --output_column "Output" \
+    --output_dir ./fine_tuned_model \
+    --deepspeed_config ./ds_config.json \
+    --model_name "codellama/CodeLlama-7b-Instruct-hf" \
+    --max_seq_length 4096 \
+    --test_size 0.15 \
+    --validation_size 0.15 \
+    --lora_r 128 \
+    --lora_alpha 32 \
+    --lora_dropout 0.1
+```
+
+## 📊 Monitoring Training
+
+### Real-time Monitoring
+
+```bash
+# Monitor GPU usage
+watch -n 1 nvidia-smi
+
+# Monitor training logs
+tail -f training.log
+
+# TensorBoard (in another terminal)
+tensorboard --logdir ./results/runs
+```
+
+### Key Metrics to Watch
+
+- **Training Loss**: Should decrease steadily
+- **Validation Loss**: Should decrease without overfitting
+- **GPU Memory**: Should be 85-95% utilized
+- **Training Speed**: ~0.5-2 seconds per step
+
+## 🔧 Configuration Details
+
+### DeepSpeed Configuration Explained
+
+```json
+{
+  "zero_optimization": {
+    "stage": 2,  // ZeRO Stage 2 for your 4x12GB setup
+    "cpu_offload": false  // Keep in GPU memory
+  },
+  "train_micro_batch_size_per_gpu": "auto",  // Automatically tuned
+  "gradient_accumulation_steps": "auto"  // Based on your batch size
+}
+```
+
+### LoRA Configuration
+
+- **Rank (r)**: 64-128 (higher = more parameters, better quality)
+- **Alpha**: 16-32 (scaling factor)
+- **Target Modules**: All linear layers for maximum coverage
+- **Dropout**: 0.0-0.1 (prevent overfitting)
+
+## 🎯 Expected Performance
+
+### Training Metrics
+- **Memory Usage**: ~10-11GB per GPU
+- **Training Speed**: 0.5-1.5 sec/step
+- **Total Time**: 2-8 hours depending on data size
+- **Final Model Size**: ~13GB (base) + ~200MB (LoRA adapters)
+
+### Model Quality Indicators
+- Training loss < 1.0
+- Validation loss not increasing
+- Generated code follows your language patterns
+
+## 🐛 Troubleshooting
+
+### Common Issues and Solutions
+
+#### CUDA Out of Memory
+```bash
+# Reduce batch size in ds_config.json
+"train_micro_batch_size_per_gpu": 1
+
+# Increase gradient accumulation
+"gradient_accumulation_steps": 8
+```
+
+#### Slow Training
+```bash
+# Enable compilation (PyTorch 2.0+)
+export TORCH_COMPILE=1
+
+# Use flash attention
+pip install flash-attn --no-build-isolation
+```
+
+#### Model Not Learning
+- Check data format (must include system prompts)
+- Increase learning rate to 5e-4
+- Reduce LoRA rank if overfitting
+- Ensure data quality and diversity
+
+### DeepSpeed Troubleshooting
+
+```bash
+# Test DeepSpeed installation
+ds_report
+
+# Check configuration
+deepspeed --num_gpus=4 --dry_run train.py --csv_path dummy.csv
+
+# Debug mode
+deepspeed --num_gpus=4 --debug train.py --csv_path your_data.csv
+```
+
+## 📁 Project Structure
+
+```
+codellama-finetune/
+├── train.py                 # Main training script
+├── ds_config.json          # DeepSpeed configuration
+├── requirements.txt        # Python dependencies
+├── training_data.csv       # Your training data
+├── results/                # Output directory
+│   ├── pytorch_model.bin   # Fine-tuned model
+│   ├── adapter_config.json # LoRA configuration
+│   ├── training_metrics.json # Training history
+│   └── runs/              # TensorBoard logs
+└── logs/
+    └── training.log       # Detailed training logs
+```
+
+## 🔄 Model Usage After Training
+
+### Loading the Fine-tuned Model
+
+```python
+from unsloth import FastLanguageModel
+
+# Load your fine-tuned model
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="./results",  # Your output directory
+    max_seq_length=2048,
+    dtype=None,
+    load_in_4bit=True,
+)
+
+# Enable fast inference
+FastLanguageModel.for_inference(model)
+
+# Generate code
+def generate_code(instruction):
+    prompt = f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
+
+You are a helpful coding assistant. Generate code based on the given instruction.<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+{instruction}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
+"""
+    
+    inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+    outputs = model.generate(**inputs, max_new_tokens=512, use_cache=True)
+    return tokenizer.batch_decode(outputs)[0]
+
+# Test the model
+result = generate_code("Write a function to reverse a string")
+print(result)
+```
+
+## 🚀 Production Deployment
+
+### Model Export Options
+
+```python
+# Save for Hugging Face Hub
+model.save_pretrained("./final_model")
+tokenizer.save_pretrained("./final_model")
+
+# Export to GGUF for CPU inference
+model.save_pretrained_gguf("./model_gguf", tokenizer)
+
+# Export to merged model (optional)
+model.save_pretrained_merged("./merged_model", tokenizer)
+```
+
+## 📈 Performance Optimization Tips
+
+1. **Data Quality**: Clean, consistent, diverse examples
+2. **Hyperparameters**: Start with provided defaults, then tune
+3. **Hardware**: Use NVLink if available, fast NVMe storage
+4. **Monitoring**: Watch for overfitting, adjust early stopping
+5. **Validation**: Test on held-out examples regularly
+
+## 🔍 Next Steps
+
+1. **Evaluation**: Create test cases for your specific language
+2. **Integration**: Build API endpoints for model serving
+3. **Iteration**: Collect more data and retrain periodically
+4. **Scaling**: Consider larger models (13B, 34B) for better quality
+
+## 💡 Tips for Success
+
+- Start with a small dataset (100-500 examples) to test the pipeline
+- Monitor GPU memory usage and adjust batch sizes accordingly
+- Keep your instruction format consistent across all examples
+- Use validation set to prevent overfitting
+- Save checkpoints frequently in case of interruptions
+- Test the model qualitatively during training
+
+## 🆘 Support
+
+If you encounter issues:
+1. Check the `training.log` file for detailed error messages
+2. Verify your data format matches the expected structure
+3. Ensure all dependencies are correctly installed
+4. Monitor system resources (GPU memory, disk space)
+5. Try reducing batch size if you encounter memory errors
+
+The training should complete successfully with your 4x12GB GPU setup using the provided configuration!
